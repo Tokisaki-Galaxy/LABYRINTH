@@ -1291,7 +1291,6 @@ const Game = {
 
     updateTitleWithEmoji(title, emoji, instant = false) {
         const titleEl = document.getElementById('gameTitle');
-        const tagsEl = document.getElementById('gameTags');
         const titleRow = titleEl.closest('.puzzle-title-row'); // 获取父容器
         let emojiContainer = document.getElementById('puzzleEmoji');
         
@@ -1685,6 +1684,7 @@ ${pastHints.length > 0 ? pastHints.join('\n') : '（暂无）'}
             card.innerHTML = `
                 <h2>${success ? "🎉 任务完成" : "💀 任务失败"}</h2>
                 <div class="score" style="color:${rankColor}">${rank}</div>
+                <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">得分: ${finalScore}</div>
                 ${earlyInfo}
                 <div style="font-size:0.9rem; color:#94a3b8">轮次: ${this.state.turnsUsed} | 提示: ${this.state.hintsUsed}</div>
                 <div class="truth-box"><strong>真相：</strong><br>${this.state.puzzle.answer}</div>
