@@ -560,17 +560,43 @@ const UI = {
         }
 
         if(role === 'system-error') {
-            el.innerHTML = `
-                <div class="error-card">
-                    <div class="error-info">
-                        <span class="iconify" data-icon="lucide:alert-circle"></span>
-                        <span>${content}</span>
-                    </div>
-                    <button class="retry-btn" onclick="Game.retry()" aria-label="重试请求">
-                        <span class="iconify" data-icon="lucide:refresh-cw"></span> 重试
-                    </button>
-                </div>
-            `;
+            // Clear existing content
+            el.innerHTML = '';
+
+            // Build error card structure safely without injecting raw HTML
+            const card = document.createElement('div');
+            card.className = 'error-card';
+
+            const info = document.createElement('div');
+            info.className = 'error-info';
+
+            const icon = document.createElement('span');
+            icon.className = 'iconify';
+            icon.setAttribute('data-icon', 'lucide:alert-circle');
+
+            const textSpan = document.createElement('span');
+            textSpan.textContent = content;
+
+            info.appendChild(icon);
+            info.appendChild(textSpan);
+
+            const retryBtn = document.createElement('button');
+            retryBtn.className = 'retry-btn';
+            retryBtn.setAttribute('onclick', 'Game.retry()');
+
+            const retryIcon = document.createElement('span');
+            retryIcon.className = 'iconify';
+            retryIcon.setAttribute('data-icon', 'lucide:refresh-cw');
+
+            const retryText = document.createTextNode(' 重试');
+
+            retryBtn.appendChild(retryIcon);
+            retryBtn.appendChild(retryText);
+
+            card.appendChild(info);
+            card.appendChild(retryBtn);
+
+            el.appendChild(card);
         } else {
             if(isHtml) el.innerHTML = content;
             else el.innerText = content;
