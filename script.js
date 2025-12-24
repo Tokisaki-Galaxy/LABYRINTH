@@ -1073,6 +1073,11 @@ const Game = {
             `;
             document.getElementById('chatList').appendChild(card);
             document.getElementById('inputWrapper').style.display = 'none';
+
+            // ✨ 修改：滚动到整个游戏容器的最底端，确保结算卡片可见
+            setTimeout(() => {
+                card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }, 100);
             
             // ✨ 新增：打印已完成游戏的调试信息
             console.group('%c📚 历史记录 (已完成)', 'color: #94a3b8; font-size: 14px;');
@@ -1360,7 +1365,6 @@ const Game = {
         }, { thinking: true }); 
     },
 
-    // 修改：handleGuess 方法
     handleGuess(g) {
         const kps = JSON.stringify(this.state.puzzle.key_points);
         const sys = `你是一个海龟汤裁判。
@@ -1409,9 +1413,8 @@ const Game = {
                         this.state.highestScore = score;
                     }
 
-                    let htmlText = g.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-                    (res.matched_segments||[]).forEach(s => htmlText = htmlText.split(s).join(`<span class="hl-ok">${s}</span>`));
-                    (res.wrong_segments||[]).forEach(s => htmlText = htmlText.split(s).join(`<span class="hl-no">${s}</span>`));
+                    // 使用新的划线处理逻辑
+                    let htmlText = this.applyHighlights(g, res.matched_segments || [], res.wrong_segments || []);
                     
                     // 分数颜色
                     let scoreColor = 'var(--c-no)';
@@ -1423,12 +1426,13 @@ const Game = {
                     const deduction = wrong > 0 ? ` <span style="font-size:0.7rem; color:var(--c-no)">(-${wrong * 10})</span>` : '';
                     const errorInfo = wrong > 0 ? `<span style="font-size:0.8rem;color:var(--c-no);margin-left:10px;">错误 ${wrong}</span>` : '';
                     
+                    // 修改：只显示当前轮次匹配的要点比例
                     const html = `
                     <div class="report">
                         <div class="report-head">
                             <span class="report-score" style="color:${scoreColor}">${score}分${deduction}</span>
                             <div style="display:flex; gap:8px; align-items:center;">
-                                <span style="font-size:0.8rem;color:#94a3b8">已匹配 ${cumulativeFound}/${total}</span>
+                                <span style="font-size:0.8rem;color:#94a3b8">本轮匹配 ${thisRoundMatched}/${total}</span>
                                 ${errorInfo}
                             </div>
                         </div>
@@ -1465,6 +1469,143 @@ const Game = {
                 }
             }
         }, { thinking: true });
+    },
+
+    // 新增：智能划线处理方法
+    applyHighlights(text, matchedSegments, wrongSegments) {
+        // 转义 HTML
+        const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        
+        // 查找所有片段在文本中的位置
+        const findAllOccurrences = (text, segment) => {
+            const positions = [];
+            let idx = 0;
+            while ((idx = text.indexOf(segment, idx)) !== -1) {
+                positions.push({ start: idx, end: idx + segment.length });
+                idx++;
+            }
+            return positions;
+        };
+        
+        // 合并重叠区间（取并集）
+        const mergeIntervals = (intervals) => {
+            if (intervals.length === 0) return [];
+            intervals.sort((a, b) => a.start - b.start);
+            const merged = [intervals[0]];
+            for (let i = 1; i < intervals.length; i++) {
+                const last = merged[merged.length - 1];
+                const curr = intervals[i];
+                if (curr.start <= last.end) {
+                    last.end = Math.max(last.end, curr.end);
+                } else {
+                    merged.push(curr);
+                }
+            }
+            return merged;
+        };
+        
+        // 收集所有正确和错误的区间
+        let okIntervals = [];
+        let noIntervals = [];
+        
+        matchedSegments.forEach(seg => {
+            okIntervals = okIntervals.concat(findAllOccurrences(text, seg));
+        });
+        
+        wrongSegments.forEach(seg => {
+            noIntervals = noIntervals.concat(findAllOccurrences(text, seg));
+        });
+        
+        // 合并同类区间
+        okIntervals = mergeIntervals(okIntervals);
+        noIntervals = mergeIntervals(noIntervals);
+        
+        // 从正确区间中移除与错误区间重叠的部分（错误优先）
+        const subtractIntervals = (base, subtract) => {
+            const result = [];
+            base.forEach(b => {
+                let current = [{ start: b.start, end: b.end }];
+                subtract.forEach(s => {
+                    const newCurrent = [];
+                    current.forEach(c => {
+                        if (s.end <= c.start || s.start >= c.end) {
+                            // 无重叠
+                            newCurrent.push(c);
+                        } else {
+                            // 有重叠，分割
+                            if (c.start < s.start) {
+                                newCurrent.push({ start: c.start, end: s.start });
+                            }
+                            if (c.end > s.end) {
+                                newCurrent.push({ start: s.end, end: c.end });
+                            }
+                        }
+                    });
+                    current = newCurrent;
+                });
+                result.push(...current);
+            });
+            return mergeIntervals(result);
+        };
+        
+        okIntervals = subtractIntervals(okIntervals, noIntervals);
+        
+        // 合并所有标记点
+        const marks = [];
+        okIntervals.forEach(i => {
+            marks.push({ pos: i.start, type: 'ok-start' });
+            marks.push({ pos: i.end, type: 'ok-end' });
+        });
+        noIntervals.forEach(i => {
+            marks.push({ pos: i.start, type: 'no-start' });
+            marks.push({ pos: i.end, type: 'no-end' });
+        });
+        
+        // 按位置排序，结束标记优先于开始标记
+        marks.sort((a, b) => {
+            if (a.pos !== b.pos) return a.pos - b.pos;
+            const order = { 'ok-end': 0, 'no-end': 1, 'ok-start': 2, 'no-start': 3 };
+            return order[a.type] - order[b.type];
+        });
+        
+        // 构建结果
+        let result = '';
+        let lastPos = 0;
+        let inOk = false;
+        let inNo = false;
+        
+        marks.forEach(m => {
+            if (m.pos > lastPos) {
+                const segment = escapeHtml(text.slice(lastPos, m.pos));
+                if (inNo) {
+                    result += `<span class="hl-no">${segment}</span>`;
+                } else if (inOk) {
+                    result += `<span class="hl-ok">${segment}</span>`;
+                } else {
+                    result += segment;
+                }
+            }
+            lastPos = m.pos;
+            
+            if (m.type === 'ok-start') inOk = true;
+            else if (m.type === 'ok-end') inOk = false;
+            else if (m.type === 'no-start') inNo = true;
+            else if (m.type === 'no-end') inNo = false;
+        });
+        
+        // 添加剩余部分
+        if (lastPos < text.length) {
+            const segment = escapeHtml(text.slice(lastPos));
+            if (inNo) {
+                result += `<span class="hl-no">${segment}</span>`;
+            } else if (inOk) {
+                result += `<span class="hl-ok">${segment}</span>`;
+            } else {
+                result += segment;
+            }
+        }
+        
+        return result;
     },
 
     // 新增：结算方法
