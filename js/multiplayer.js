@@ -211,6 +211,14 @@ const Multiplayer = {
             Game.applyGeneratedPuzzle(data);
         } else if (msg.type === 'chat') {
             const isUser = msg.content.includes('[提问]') || msg.content.includes('[猜谜]');
+            
+            // 对于用户消息，额外检查是否已在历史记录中（乐观更新已添加）
+            // 这样可以避免显示自己发送的消息两次
+            if (isUser) {
+                const isDuplicate = Game.state.history.some(h => h.content === msg.content);
+                if (isDuplicate) return;
+            }
+            
             const role = isUser ? (msg.content.includes('[提问]') ? 'user-ask' : 'user-guess') : 'ai';
             const isHtml = !isUser && msg.content.trim().startsWith('<div');
             const displayContent = isUser
